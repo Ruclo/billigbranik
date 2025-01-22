@@ -1,69 +1,92 @@
 import re
 from playwright.async_api import async_playwright
 import asyncio
+from models.models import *
+from models.enums import *
+from unicodedata import normalize, combining
 
-async def scrape_product(browser, url: str) -> dict[str, str]:
-    price_str = None
-    amount_str = None
+BASE_URL = 'https://nakup.itesco.cz'
+URL = BASE_URL + '/groceries/cs-CZ/search?query=branik'
 
+async def extract_listing_info(browser, url: str) -> BeerListing:
     page = await browser.new_page()
     await page.goto(url)
 
-    price_div = await page.wait_for_selector('div.price-per-sellable-unit')
-    amount_div = await page.query_selector('div#pack-size')
-    amount_str = await amount_div.text_content()
-    
-    discount_span = await page.query_selector('span.offer-text')
-    if discount_span:
-        price_str = await discount_span.text_content()
-    else:
-        price_str = await price_div.text_content()
+    product_title = await page.locator("h1.product-details-tile__title").first.inner_text()
+    product_title = ''.join(c for c in normalize('NFKD', product_title) if not combining(c)).lower()
 
-
-    price_pattern = r'(\d+[.,]?\d*)\s*(K[cč]{1})?'
-
-    
-    matches = re.findall(price_pattern, price_str, re.IGNORECASE)
+    offer_span = page.locator("span.offer-text").first
 
     price = None
-    for match in matches:
-        match = match[0].replace(',', '.')
-        if price is None or match < price:
-            price = match
+    if await offer_span.is_visible():
+        offer_text = await offer_span.inner_text()
+        matches = re.findall(r'(\d+[.,]?\d*)\s*K[cč]', offer_text, re.IGNORECASE)
+        for match in matches:
+            match = match.replace(',', '.')
+            match = Decimal(match)
+            if price is None or match < price:
+                price = match
+    else:
+        price_text = await page.locator('.price-control-wrapper .value').first.inner_text()
+        price_text = price_text.replace(',', '.')
+        price = Decimal(price_text)
 
-    match = re.search(r'(\d+(\.\d+)?l)', amount_str)
-    return {match.group(0): price}
+    beer_type = None
+    if 'jedenactka' in product_title or '11' in product_title:
+        beer_type = BeerType.LEZAK_11
+    else:
+        description = await page.locator('div#product-description').inner_text()
+        description = ''.join(c for c in normalize('NFKD', description) if not combining(c)).lower()
+        beer_type = BeerType.LEZAK_10 if 'lezak' in description else BeerType.VYCEPNI_10
     
+    volume_text = await page.locator("div#net-contents").inner_text()
+    match = re.search(r'((\d+)\s*x)?\s*(\d+[.,]?\d*)\s*l', volume_text)
+    units = match.group(2)
+    volume = Decimal(match.group(3).replace(',', '.'))
+
+    deposit_info = page.locator('div#deposit-info')
+
+    container = None
+    if await deposit_info.is_visible():
+        container = ContainerType.GLASS
+    else:
+        container = ContainerType.CAN if volume < 1 else ContainerType.PET
+
+    await page.close()
+
+    listing = BeerListing(beer_type, container, volume, price)
+    if units is not None:
+        listing.units = units
+
+    return listing
 
 
-async def get_prices() -> dict[str, str]:
-    branik_links = [
-        'https://nakup.itesco.cz/groceries/cs-CZ/products/2001000112197',
-        'https://nakup.itesco.cz/groceries/cs-CZ/products/2001019165245',
-        'https://nakup.itesco.cz/groceries/cs-CZ/products/2001010175052'
+async def get_listings(browser) -> StoreInventory:
 
-    ]
-    dic = {}
-    results = []
+    page = await browser.new_page()
+    await page.goto(URL)
 
+    inventory = StoreInventory('Tesco')
+    await page.wait_for_selector('.results-page')
+
+    anchors = await page.locator("a.product-image-wrapper").all()
+    hrefs = set([BASE_URL + await anchor.get_attribute("href") for anchor in anchors])
+    print(hrefs)
+    await page.close()
+
+    tasks = [extract_listing_info(browser, link) for link in hrefs]
+
+    listings = await asyncio.gather(*tasks)
+    print(listings)
+    inventory.beers = listings
+    return inventory
+
+async def main():
     async with async_playwright() as p:
         browser = await p.firefox.launch(headless=True)
-
-        tasks = [scrape_product(browser, link) for link in branik_links]
-        results = await asyncio.gather(*tasks)
+        await get_listings(browser)
 
         await browser.close()
-    
-    for extracted_price in results:
-        if not extracted_price:
-            continue
-        
-        for size, price in extracted_price.items():
-            if size not in dic or price < dic[size]:
-                dic[size] = price
-    
-
-    return dic
 
 if __name__ == '__main__':
-    asyncio.run(get_prices())
+    asyncio.run(main())
