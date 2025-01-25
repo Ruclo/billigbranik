@@ -48,9 +48,9 @@ async def extract_listing_info(browser, url: str) -> BeerListing:
 
     await page.close()
 
-    listing = BeerListing(beer_type, container, volume, price)
+    listing = BeerListing(type=beer_type, container=container, volume_l=volume, price_czk=price)
     if units is not None:
-        listing.units = units
+        listing.units = int(units)
 
     return listing
 
@@ -60,7 +60,7 @@ async def get_listings(browser) -> StoreInventory:
     page = await browser.new_page()
     await page.goto(URL)
 
-    inventory = StoreInventory('Tesco')
+    inventory = StoreInventory(store='Tesco')
     await page.wait_for_selector('.results-page')
 
     anchors = await page.locator("a.product-image-wrapper").all()

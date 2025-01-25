@@ -36,7 +36,7 @@ async def extract_listing_info(browser, url) -> BeerListing:
    price = Decimal(price.replace(',', '.'))
 
    await page.close()
-   bl = BeerListing(beer_type, container, volume, price)
+   bl = BeerListing(type=beer_type, container=container, volume_l=volume, price_czk=price)
    print(bl)
    return bl
 
@@ -46,7 +46,7 @@ async def get_listings(browser) -> StoreInventory:
    page = await browser.new_page()
    await page.goto(URL)
 
-   inventory = StoreInventory("Lidl")
+   inventory = StoreInventory(store="Lidl")
 
    await page.wait_for_selector('.s-loading')
 
@@ -75,6 +75,7 @@ async def get_listings(browser) -> StoreInventory:
    listings = await asyncio.gather(*tasks)
    inventory.beers = listings
 
+   return inventory
    
 
 

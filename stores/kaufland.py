@@ -13,7 +13,7 @@ async def get_listings(browser) -> StoreInventory:
    await page.goto(URL)
 
    items = await page.locator('.k-product-tile').all()
-   inventory = StoreInventory('Kaufland')
+   inventory = StoreInventory(store='Kaufland')
 
    for item in items:
       description = await item.locator('.k-product-tile__text').first.inner_text()
@@ -43,7 +43,7 @@ async def get_listings(browser) -> StoreInventory:
       
       price = Decimal(price_info.replace(',', '.'))
 
-      listing = BeerListing(beer_type, container_type, volume, price)
+      listing = BeerListing(type=beer_type, container=container_type, volume_l=volume, price_czk=price)
       inventory.beers.append(listing)
          
    await page.close()

@@ -24,7 +24,7 @@ async def extract_listing_info(browser, link) -> BeerListing:
     await page.goto(link)
     await page.get_by_test_id("product-details-section").wait_for(timeout = 30000)
 
-    price_div = page.get_by_test_id("product-block-price")
+    price_div = page.get_by_test_id("product-block-price").first
     main_price = await price_div.locator("div").nth(1).inner_text()
     sup_price = await price_div.locator("sup").inner_text()
 
@@ -52,7 +52,7 @@ async def extract_listing_info(browser, link) -> BeerListing:
     
 
     await page.close()
-    bl = BeerListing(beer_type, container, volume, price)
+    bl = BeerListing(type=beer_type, container=container, volume_l=volume, price_czk=price)
     print(bl)
     return bl
 
@@ -61,8 +61,8 @@ async def get_listings(browser) -> StoreInventory:
     page = await browser.new_page()
     await page.goto(URL)
 
-    inventory = StoreInventory("Albert")
-    
+    inventory = StoreInventory(store="Albert")
+    print(f'{page.viewport_size}=')
     try:
         await page.get_by_test_id("total-products-desktop-info").wait_for(timeout = 30000)
         #await page.wait_for_selector("li.product-item", timeout=15000)
@@ -77,8 +77,11 @@ async def get_listings(browser) -> StoreInventory:
     await page.close()
     print(hrefs)
 
-    tasks = [extract_listing_info(browser, link) for link in hrefs]
-    listings = await asyncio.gather(*tasks)
+    listings = []
+    for link in hrefs:
+        listings.append(await extract_listing_info(browser, link))
+    #tasks = [extract_listing_info(browser, link) for link in hrefs]
+    #listings = await asyncio.gather(*tasks)
 
     inventory.beers = listings
 
