@@ -4,6 +4,7 @@ import asyncio
 from models.models import *
 from models.enums import *
 from unicodedata import normalize, combining
+from utils.beer_type_extractor import extract_beer_type
 
 BASE_URL = 'https://nakup.itesco.cz'
 URL = BASE_URL + '/groceries/cs-CZ/search?query=branik'
@@ -12,11 +13,7 @@ async def extract_listing_info(browser, url: str) -> BeerListing:
     page = await browser.new_page()
     await page.goto(url)
 
-    product_title = await page.locator("h1.product-details-tile__title").first.inner_text()
-    product_title = ''.join(c for c in normalize('NFKD', product_title) if not combining(c)).lower()
-
     offer_span = page.locator("span.offer-text").first
-
     price = None
     if await offer_span.is_visible():
         offer_text = await offer_span.inner_text()
@@ -31,13 +28,10 @@ async def extract_listing_info(browser, url: str) -> BeerListing:
         price_text = price_text.replace(',', '.')
         price = Decimal(price_text)
 
-    beer_type = None
-    if 'jedenactka' in product_title or '11' in product_title:
-        beer_type = BeerType.LEZAK_11
-    else:
-        description = await page.locator('div#product-description').inner_text()
-        description = ''.join(c for c in normalize('NFKD', description) if not combining(c)).lower()
-        beer_type = BeerType.LEZAK_10 if 'lezak' in description else BeerType.VYCEPNI_10
+    product_title = await page.locator("h1.product-details-tile__title").first.inner_text()
+
+    description = product_title + await page.locator('div#product-description').inner_text()
+    beer_type = extract_beer_type(description)
     
     volume_text = await page.locator("div#net-contents").inner_text()
     match = re.search(r'((\d+)\s*x)?\s*(\d+[.,]?\d*)\s*l', volume_text)

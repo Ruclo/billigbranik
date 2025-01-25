@@ -3,6 +3,7 @@ from playwright.async_api import async_playwright
 import asyncio
 from models.models import *
 from models.enums import *
+from utils.beer_type_extractor import extract_beer_type
 from unicodedata import normalize, combining
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -12,7 +13,34 @@ URL = BASE_URL + '/q/search?q=branik'
 TIMEZONE_CZECH = ZoneInfo("Europe/Prague")
 
 async def extract_listing_info(browser, url) -> BeerListing:
-   pass
+   page = await browser.new_page()
+
+   await page.goto(url)
+
+   description = await page.locator('div.keyfacts').first.inner_text()
+   description = ''.join(c for c in normalize('NFKD', description) if not combining(c)).lower()
+
+   beer_type = extract_beer_type(description)
+   
+   volume = Decimal(re.search(r'(\d+[.,]?\d*)\s*l', description).group(1).replace(',', '.'))
+
+   container = None
+   if 'zaloha' in description:
+      container = ContainerType.GLASS
+   elif volume < 1:
+      container = ContainerType.CAN
+   else:
+      container = ContainerType.PET
+   
+   price = await page.locator('div.m-price__price').first.inner_text()
+   price = Decimal(price.replace(',', '.'))
+
+   await page.close()
+   bl = BeerListing(beer_type, container, volume, price)
+   print(bl)
+   return bl
+
+
 
 async def get_listings(browser) -> StoreInventory:
    page = await browser.new_page()
