@@ -3,6 +3,7 @@ from asyncio import run
 from flask import Flask
 from apscheduler.schedulers.background import BackgroundScheduler
 app = Flask(__name__)
+app.json.ensure_ascii = False
 
 listings_dict = update_listings()
 
