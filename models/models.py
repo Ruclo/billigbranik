@@ -31,9 +31,9 @@ class StoreInventory(BaseModel):
     #assumes field beers is sorted
     def __lt__(self, other: 'StoreInventory') -> bool:
         if not self.beers:
-            return True
+            return False
 
         if not other.beers:
-            return False
+            return True
 
         return self.beers[0] < other.beers[0]

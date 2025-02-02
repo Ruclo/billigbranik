@@ -67,10 +67,10 @@ async def get_listings(browser) -> StoreInventory:
     hrefs = set([BASE_URL + await anchor.get_attribute("href") for anchor in anchors])
     print(hrefs)
     await page.close()
-
-    tasks = [extract_listing_info(browser, link) for link in hrefs]
-
-    listings = await asyncio.gather(*tasks)
+    
+    listings = []
+    for link in hrefs:
+        listings.append(await extract_listing_info(browser, link))
     print(listings)
     inventory.beers = listings
     return inventory
